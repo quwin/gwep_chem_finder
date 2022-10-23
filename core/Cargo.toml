@@ -11,3 +11,5 @@ cli = {path = "../cli"}
 pest = "2.3.0"
 pest_derive = "2.3.0"
 clap = {version = "4.0.17", features = ["derive"]}
+sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "sqlite" ] }
+tokio = { version = "1", features = ["full"] }
