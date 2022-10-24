@@ -1,5 +1,7 @@
+use sqlx::{sqlite::{SqliteConnectOptions, SqliteJournalMode}, ConnectOptions};
+
 use crate::chemicals::Reaction;
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, io, str::FromStr};
 
 pub struct Maps {
     pub reaction_map: HashMap<String, Reaction>,
@@ -119,6 +121,83 @@ fn string_permutations(string: String) -> Vec<String> {
         }
     }
     permmutations
+}
+#[tokio::main]
+pub async fn sql_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
+    dotenvy::dotenv().ok();
+
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut strings: Vec<String> = Vec::new();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let first_key  = format!("{}%", input);
+    let first_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE internal_name LIKE ?
+        OR name LIKE ?
+        OR result LIKE ?;
+        "#,
+        first_key,
+        first_key,
+        first_key
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for result in first_search {
+        strings.push(result.internal_name.clone().unwrap())
+    }
+
+    if strings.len() > 5 {
+        strings = strings[0..5].to_vec();
+        return Ok(strings)
+    }
+
+    let second_key  = format!("%{}", first_key);
+    let second_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE internal_name LIKE ?
+        OR name LIKE ?
+        OR result LIKE ?;
+        "#,
+        second_key,
+        second_key,
+        second_key
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    if second_search.len() > 0 {
+        let mut counter = 0;
+        while strings.len() < 6 && counter < second_search.len() {
+            let internal_name = second_search[counter].internal_name.clone().unwrap();
+            if !strings.contains(&internal_name) {
+                strings.push(internal_name);
+            }
+            counter += 1;
+        }
+        return Ok(strings)
+    }
+
+    if strings.len() > 5 {
+        strings = strings[0..5].to_vec()
+    }
+
+    if strings.len() == 0{
+        return Err(sqlx::Error::TypeNotFound {
+            type_name: input.clone()
+        })
+    }
+
+    Ok(strings)
 }
 
 //Returns a string for the compound trees
