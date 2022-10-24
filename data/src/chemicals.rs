@@ -231,6 +231,10 @@ impl Reaction {
         self.internal_name.clone()
     }
 
+    pub fn get_id_of_recipe(&self, id: usize) -> String {
+        self.recipes[id].id.clone()
+    }
+
     pub fn is_instant(&self) -> bool {
         self.instant
     }
@@ -241,6 +245,14 @@ impl Reaction {
 
     pub fn get_required_temp(&self) -> Option<f32> {
         self.required_temperature
+    }
+
+    pub fn get_mix_phrase(&self) -> String {
+        self.mix_phrase.clone()
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        self.hidden
     }
 
     pub fn get_reagents_of_recipe(&self, u: usize) -> &Vec<RawReagent> {

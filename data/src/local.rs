@@ -4,15 +4,20 @@ use std::{
     path::Path,
 };
 
-use crate::chemicals::*;
+use crate::{chemicals::*, sql::{add_reaction, add_reactions}};
 use serde_json;
 
 pub fn serialize(compounds: &Data, serialize_path: String) {
+    add_reactions(add_reaction(compounds.compounds.clone()));
     let data = serde_json::to_string(compounds).unwrap();
 
     let mut file = File::create(serialize_path).expect("Error while creating file");
 
     write!(file, "{}", data).expect("Failed to write to file");
+}
+
+pub fn serialize_to_sql(compounds: &Data) {
+    add_reaction(compounds.compounds.clone()).ok();
 }
 
 pub fn deserialize(deserialize_path: String) -> Vec<Reaction> {

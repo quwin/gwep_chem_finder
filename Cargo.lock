@@ -220,6 +220,7 @@ dependencies = [
 name = "data"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "once_cell",
  "pest",
  "pest_derive",
