@@ -1,9 +1,9 @@
 use crate::{
     chem_tree::{ChemTree, ChemTreeNode},
     chemicals::{Chemical, Data, Reaction},
-    local::{deserialize, serialize},
+    local::{deserialize, serialize, serialize_to_sql, deserialize_from_sql},
     parser,
-    search_engine::{generate_search_keys, Maps},
+    search_engine::{generate_search_keys, Maps}, sql::{setup_database, database}
 };
 use std::collections::HashMap;
 
@@ -13,8 +13,10 @@ pub fn initialize_compound_tree(
 ) -> (Box<HashMap<String, ChemTree>>, Maps) {
     match optional_path {
         Some(path) => {
+            setup_database(database());
             let reactions = parser::parse(path);
             println!("There are {} compounds.", reactions.len());
+            serialize_to_sql(reactions.clone());
             let data = Data {
                 compounds: reactions,
             };
@@ -22,7 +24,7 @@ pub fn initialize_compound_tree(
         }
         None => {}
     }
-    let reactions = deserialize(serialize_path);
+    let reactions = deserialize_from_sql();
     let mut reaction_map: HashMap<String, Reaction> = HashMap::with_capacity(reactions.len());
     let mut result_map: HashMap<String, Vec<String>> = HashMap::with_capacity(reactions.len());
     let mut search_map: HashMap<String, Vec<String>> = HashMap::with_capacity(reactions.len());
