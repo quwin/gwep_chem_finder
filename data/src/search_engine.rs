@@ -6,276 +6,461 @@ use std::{collections::HashMap, io, str::FromStr};
 pub struct Maps {
     pub reaction_map: HashMap<String, Reaction>,
     pub result_map: HashMap<String, Vec<String>>,
-    pub search_map: HashMap<String, Vec<String>>,
     pub uses_map: HashMap<String, Vec<String>>,
 }
-
-pub fn generate_search_keys(
-    mut map: HashMap<String, Vec<String>>,
-    reaction: Reaction,
-) -> HashMap<String, Vec<String>> {
-    let internal_name = reaction.get_internal_name();
-    let result = reaction.get_result().to_lowercase();
-    let name = reaction.get_name().to_lowercase();
-    let mut all_keywords: Vec<String> = Vec::new();
-    all_keywords.append(&mut string_permutations(internal_name.clone()));
-    all_keywords.append(&mut string_permutations(result));
-    all_keywords.append(&mut string_permutations(name));
-
-    for keyword in all_keywords {
-        map = insert_keyword(map, keyword, &internal_name);
-    }
-
-    map
-}
-
-fn insert_keyword(
-    mut map: HashMap<String, Vec<String>>,
-    word: String,
-    internal_name: &String,
-) -> HashMap<String, Vec<String>> {
-    for k in 0..word.len() {
-        let chars = word.chars();
-        let string: String = chars.take(k + 1).collect();
-        match map.get(&string) {
-            Some(array) => {
-                if array.contains(internal_name) {
-                    continue;
-                } else {
-                    map.entry(string)
-                        .or_default()
-                        .push(internal_name.to_string());
-                }
-            }
-            None => {
-                map.entry(string)
-                    .or_default()
-                    .push(internal_name.to_string());
-            }
-        }
-    }
-    map
-}
-
-fn string_permutations(string: String) -> Vec<String> {
-    let mut permmutations: Vec<String> = Vec::new();
-    permmutations.push(string.clone());
-    // Thankfully there are no instances of ["_" and "-" or " "] being in the same name
-    if string.clone().contains("-") || string.clone().contains(" ") {
-        // First, pushes all permutations using "-", "", " ", or "_" as fillers between words
-        permmutations.push(string.replace("-", ""));
-        permmutations.push(string.replace(" ", ""));
-        permmutations.push(string.replace(" ", "").replace("-", ""));
-        permmutations.push(string.replace(" ", "-"));
-        let only_spaces = string.replace("-", " ");
-        permmutations.push(only_spaces.clone());
-        // Uses the last part with " " between words to make accessing each individual word easier
-        let mut only_words = only_spaces.split_whitespace(); // split_whitespace works with multiple spaces in a row
-        only_words.next();
-        // Loop pushes each word individually [Very, High, Fructose, Corn, Syrup], and sets up for inner loop
-        loop {
-            let word = only_words.next();
-            if word == None {
-                return permmutations;
-            }
-            let word_to_string = word.unwrap().to_string();
-            permmutations.push(word_to_string.clone());
-            let space_clone = only_spaces.clone();
-            let mut clone = space_clone.split_whitespace();
-            let mut more_words: String = "".to_string();
-            // Inner loop gets all word order permutations, for example [Very Fructose, High Corn, Fructose Syrup]
-            loop {
-                let next = clone.next();
-                if next == None {
-                    break;
-                }
-                more_words.push_str(next.unwrap());
-                if &word_to_string != &next.unwrap() {
-                    permmutations.push(format!("{}{}", &word_to_string, &next.unwrap()));
-                    permmutations.push(format!("{} {}", &word_to_string, &next.unwrap()));
-                    permmutations.push(format!("{}-{}", &word_to_string, &next.unwrap()));
-                    permmutations.push(format!("{}_{}", &word_to_string, &next.unwrap()));
-                }
-                if &word_to_string != &more_words {
-                    permmutations.push(more_words.clone());
-                    permmutations.push(format!("{}{}", &word_to_string, &more_words));
-                    permmutations.push(format!("{} {}", &word_to_string, &more_words));
-                    permmutations.push(format!("{}-{}", &word_to_string, &more_words));
-                    permmutations.push(format!("{}_{}", &word_to_string, &more_words));
-                }
-            }
-        }
-    }
-    if string.clone().contains("_") {
-        permmutations.push(string.replace("_", ""));
-        permmutations.push(string.replace("_", " "));
-        permmutations.push(string.replace("_", "-"));
-        let mut no_underscores = string.split("_");
-        no_underscores.next(); // The first word is covered by other permutations
-        loop {
-            let word = no_underscores.next();
-            if word == None {
-                return permmutations;
-            }
-            permmutations.push(word.unwrap().to_string());
-        }
-    }
-    permmutations
-}
 #[tokio::main]
-pub async fn sql_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
+pub async fn reaction_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
+    let mut strings: Vec<String> = Vec::new();
+    strings = search_reaction_starts_with(input, strings).await?;
+    strings = search_reaction_multi_starts_with(input, strings).await?;
+
+    if strings.len() > 5 {
+        return Ok(strings[0..5].to_vec())
+    }
+
+    strings = search_reaction_contains(input, strings).await?;
+
+    if strings.len() > 5 {
+        return Ok(strings[0..5].to_vec())
+    } 
+
+    strings = search_typos(input, strings, true).await?;
+
+    if strings.len() > 5 {
+        return Ok(strings[0..5].to_vec())
+    } else if strings.len() > 0 {
+        return Ok(strings)
+    }
+
+    Err(sqlx::Error::RowNotFound)
+}
+
+pub async fn search_reaction_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
     let env = &std::env::var("DATABASE_URL").ok().unwrap();
-
-    let mut strings: Vec<String> = Vec::new();
 
     let mut conn = SqliteConnectOptions::from_str(env)?
         .journal_mode(SqliteJournalMode::Wal)
         .connect().await?;
 
-    let first_key  = format!("{}%", input);
-    let first_search = sqlx::query!(
+    let formatted = format!("{}%", input);
+
+    let internal_name_search = sqlx::query!(
         r#"
         SELECT internal_name
         FROM reactions
         WHERE internal_name LIKE ?
-        OR name LIKE ?
-        OR result LIKE ?;
+        ORDER BY internal_name ASC;
         "#,
-        first_key,
-        first_key,
-        first_key
+        formatted
     )
     .fetch_all(&mut conn)
     .await?;
 
-    for result in first_search {
-        strings.push(result.internal_name.clone().unwrap())
-    }
-
-    if strings.len() > 5 {
-        strings = strings[0..5].to_vec();
-        return Ok(strings)
-    }
-
-    let second_key  = format!("%{}", first_key);
-    let second_search = sqlx::query!(
+    let result_search = sqlx::query!(
         r#"
         SELECT internal_name
         FROM reactions
-        WHERE internal_name LIKE ?
-        OR name LIKE ?
-        OR result LIKE ?;
+        WHERE result LIKE ?
+        ORDER BY result ASC;
         "#,
-        second_key,
-        second_key,
-        second_key
+        formatted
     )
     .fetch_all(&mut conn)
     .await?;
 
-    if second_search.len() > 0 {
-        let mut counter = 0;
-        while strings.len() < 6 && counter < second_search.len() {
-            let internal_name = second_search[counter].internal_name.clone().unwrap();
-            if !strings.contains(&internal_name) {
-                strings.push(internal_name);
-            }
-            counter += 1;
+    let name_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE name LIKE ?
+        ORDER BY name ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for output in internal_name_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
         }
-        return Ok(strings)
     }
-
-    if strings.len() > 5 {
-        strings = strings[0..5].to_vec()
+    for output in result_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
     }
+    for output in name_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+    Ok(strings)
+}
 
-    if strings.len() == 0{
-        return Err(sqlx::Error::TypeNotFound {
-            type_name: input.clone()
-        })
+pub async fn search_reaction_multi_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let formatted = format!(r"%\_{}%", input);
+
+    let underscore_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE internal_name LIKE ? ESCAPE '\'
+        OR result LIKE ? ESCAPE '\'
+        ORDER BY internal_name ASC;
+        "#,
+        formatted,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let formatted_space = format!("% {}%", input);
+
+    let space_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE name LIKE ?
+        OR result LIKE ?
+        ORDER BY name,result ASC;
+        "#,
+        formatted_space,
+        formatted_space
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let formatted_hyphen = format!("%-{}%", input);
+
+    let hyphen_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE name LIKE ?
+        ORDER BY internal_name ASC;
+        "#,
+        formatted_hyphen
+        )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for output in underscore_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+    for output in space_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+    for output in hyphen_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+    Ok(strings)
+}
+
+pub async fn search_reaction_contains(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let formatted = format!("%{}%", input);
+
+    let internal_name_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE internal_name LIKE ?
+        ORDER BY internal_name ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let result_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE result LIKE ?
+        ORDER BY result ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let name_search = sqlx::query!(
+        r#"
+        SELECT internal_name
+        FROM reactions
+        WHERE name LIKE ?
+        ORDER BY name ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for output in internal_name_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+    for output in result_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+    for output in name_search {
+        let unwrapped = output.internal_name.unwrap();
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
     }
 
     Ok(strings)
 }
 
-//Returns a string for the compound trees
-pub fn fuzzy_search(input: &String, maps: &Maps) -> String {
-    let mut best_score: (i32, String) = (i32::MAX, String::new());
-    for x in &maps.search_map {
-        let diff = score_diff(&x.0, input);
+/* 
+- Replaces characters in input with '_' representing any possible single character (or lack thereof), then searches through all other searches
+- Checks in reverse order of string, so if searching for "blood", searching "bloop", "bloed", etc. will give better results than "flood". 
+- Likewise, searching "flood", a single letter typo, will give better results than "bloea", "blaad", "breod", two letter typos.
+- Catches incorrect string lengths as well, but their priority is lowered.
+- Searching "blooood" hits "blood" on loop 2-2, due to looking up "bloo__d" hitting "blood"
+- Typo search is O(n²) at minimum until it hits at least 5 results so please dont use excessive input lengths... need to set a max input length
+*/
+pub async fn search_typos(input: &String, mut strings: Vec<String>, reaction: bool) -> Result<Vec<String>, sqlx::Error > {
 
-        if diff.0 == 0 {
-            best_score = diff;
-            break;
-        }
-
-        if diff.0 < best_score.0 {
-            best_score = diff;
-        }
-    }
-    println!(
-        "Closest Match: {} with a score of {}",
-        best_score.1, best_score.0
-    );
-
-    let result = maps.search_map.get(&best_score.1).unwrap();
-    if result.len() > 1 {
-        best_score.1 = collision_select(result);
-    } else {
-        best_score.1 = result.get(0).unwrap().to_string()
+    // Prevents underflow
+    // Was thinking about doing input / x but doing this and truncating the input when it's received leads to a wider range of results
+    let mut reserved_length = input.len() as i32 - 2;
+    if reserved_length < 0 {
+        reserved_length = 0
     }
 
-    best_score.1
+    for length in 0..reserved_length as usize {
+        for index in (length..input.len()).rev() {
+            let mut new_input = input.clone();
+            new_input.replace_range(index - length..index + 1, "_");
+    
+            if reaction {
+                strings = search_reaction_starts_with(&new_input, strings).await?;
+                strings = search_reaction_multi_starts_with(&new_input, strings).await?;
+                strings = search_reaction_contains(&new_input, strings).await?;
+            } else {
+                strings = search_reagent_starts_with(&new_input, strings).await?;
+                strings = search_reagent_multi_starts_with(&new_input, strings).await?;
+                strings = search_reagent_contains(&new_input, strings).await?;
+            }
+    
+            if strings.len() >= 5 {
+                return Ok(strings[0..5].to_vec())
+            }
+        }
+    }
+
+    Ok(strings)
 }
 
-fn score_diff(searched: &String, input: &String) -> (i32, String) {
-    // Use these iterator functions to clean the input to match
-    let searched_c: String = searched
-        .chars()
-        .map(|x| match x {
-            '_' => ' ',
-            '-' => ' ',
-            _ => x,
-        })
-        .collect();
+#[tokio::main]
+pub async fn reagent_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
+    let mut strings: Vec<String> = Vec::new();
+    strings = search_reagent_starts_with(input, strings).await?;
+    strings = search_reagent_multi_starts_with(input, strings).await?;
 
-    let input_c: String = input
-        .chars()
-        .map(|x| match x {
-            '_' => ' ',
-            '-' => ' ',
-            _ => x,
-        })
-        .collect();
-
-    let mut total_diff = 0;
-    let longer: String;
-    let shorter: String;
-
-    if searched.len() > input.len() {
-        longer = searched_c;
-        shorter = input_c;
-    } else {
-        shorter = searched_c;
-        longer = input_c;
+    if strings.len() > 5 {
+        return Ok(strings[0..5].to_vec())
     }
 
-    let mut s_chars = shorter.chars();
+    strings = search_reagent_contains(input, strings).await?;
 
-    for c1 in longer.chars() {
-        match s_chars.next() {
-            Some(c2) => {
-                let diff = c1 as i32 - c2 as i32;
-                total_diff += diff.abs();
-            }
-            None => {
-                total_diff += 26;
-            }
+    if strings.len() > 5 {
+        return Ok(strings[0..5].to_vec())
+    } 
+
+    strings = search_typos(input, strings, false).await?;
+
+    if strings.len() > 5 {
+        return Ok(strings[0..5].to_vec())
+    } else if strings.len() > 0 {
+        return Ok(strings)
+    }
+
+    Err(sqlx::Error::RowNotFound)
+}
+
+pub async fn search_reagent_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let formatted = format!("{}%", input);
+
+    let name_search = sqlx::query!(
+        r#"
+        SELECT name
+        FROM reagents
+        WHERE name LIKE ?
+        ORDER BY name ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for output in name_search {
+        let unwrapped = output.name;
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
         }
     }
-    (total_diff, searched.to_string())
+   
+    Ok(strings)
+}
+
+pub async fn search_reagent_multi_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let formatted = format!(r"%\_{}%", input);
+
+    let underscore_search = sqlx::query!(
+        r#"
+        SELECT name
+        FROM reagents
+        WHERE name LIKE ? ESCAPE '\'
+        ORDER BY name ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let formatted2 = format!(r"% {}%", input);
+
+    let space_search = sqlx::query!(
+        r#"
+        SELECT name
+        FROM reagents
+        WHERE name LIKE ? ESCAPE '\'
+        ORDER BY name ASC;
+        "#,
+        formatted2
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let formatted3 = format!(r"%-{}%", input);
+
+    let hyphen_search = sqlx::query!(
+        r#"
+        SELECT name
+        FROM reagents
+        WHERE name LIKE ? ESCAPE '\'
+        ORDER BY name ASC;
+        "#,
+        formatted3
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for output in underscore_search {
+        let unwrapped = output.name;
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+
+    for output in space_search {
+        let unwrapped = output.name;
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+
+    for output in hyphen_search {
+        let unwrapped = output.name;
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+
+    Ok(strings)
+}
+
+pub async fn search_reagent_contains(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let formatted = format!("%{}%", input);
+
+    let contains_search = sqlx::query!(
+        r#"
+        SELECT name
+        FROM reagents
+        WHERE name LIKE ?
+        ORDER BY name ASC;
+        "#,
+        formatted
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for output in contains_search {
+        let unwrapped = output.name;
+        if !strings.contains(&unwrapped) {
+            strings.push(unwrapped)
+        }
+    }
+
+    Ok(strings)
 }
 
 pub fn clean_input(input: String) -> String {
@@ -285,7 +470,7 @@ pub fn clean_input(input: String) -> String {
 
 pub fn collision_select(result: &Vec<String>) -> String {
     println!(
-        "Found {} possible options. Please select one to continue.",
+        "Found {} likely options. Please select one to continue.",
         result.len()
     );
     for (i, r) in result.iter().enumerate() {

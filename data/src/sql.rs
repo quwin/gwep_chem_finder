@@ -7,6 +7,7 @@ use crate::chemicals::{Reaction, BASES_MAP, Recipe, RawReagent};
 pub async fn get_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
     let env = &std::env::var("DATABASE_URL").ok().unwrap();
 
     let mut reactions: Vec<Reaction> = Vec::new();
@@ -105,6 +106,7 @@ pub async fn get_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
 pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > {
     dotenvy::dotenv().ok();
 
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
     let env = &std::env::var("DATABASE_URL").ok().unwrap();
 
     let mut conn = SqliteConnectOptions::from_str(env)?
@@ -238,6 +240,7 @@ pub async fn add_reactions(result: Result<(), sqlx::Error >) {
 pub async fn database() -> Result<(), sqlx::Error > {
     dotenvy::dotenv().ok();
 
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
     let env = &std::env::var("DATABASE_URL").ok().unwrap();
 
     let mut conn = SqliteConnectOptions::from_str(env)?

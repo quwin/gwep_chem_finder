@@ -282,7 +282,7 @@ impl Reaction {
 use crate::initialize_maps::initialize_compound_tree;
 #[test]
 fn test_no_bases_in_reaction_map() {
-    let initialize = initialize_compound_tree("data.json".to_string(), None);
+    let initialize = initialize_compound_tree(None);
     let maps = initialize.1;
 
     for base in BASES_MAP.clone().into_keys() {
@@ -294,7 +294,7 @@ fn test_no_bases_in_reaction_map() {
 }
 #[test]
 fn test_acetic_acid() {
-    let initialize = initialize_compound_tree("data.json".to_string(), None);
+    let initialize = initialize_compound_tree(None);
     let maps = initialize.1;
 
     let reaction = maps.reaction_map.get("acetic_acid").unwrap();
@@ -325,7 +325,7 @@ fn test_acetic_acid() {
 }
 #[test]
 fn test_vtonic() {
-    let initialize = initialize_compound_tree("data.json".to_string(), None);
+    let initialize = initialize_compound_tree(None);
     let maps = initialize.1;
 
     let reaction = maps.reaction_map.get("cocktail_vtonic").unwrap();
@@ -354,7 +354,7 @@ fn test_vtonic() {
 }
 #[test]
 fn test_dna_mutagen() {
-    let initialize = initialize_compound_tree("data.json".to_string(), None);
+    let initialize = initialize_compound_tree(None);
     let maps = initialize.1;
 
     let reaction = maps.reaction_map.get("dna_mutagen").unwrap();

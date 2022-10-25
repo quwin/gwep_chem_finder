@@ -41,9 +41,9 @@ fn main() {
     let data_string = "data/data.json".to_string();
     let initialize: (Box<HashMap<String, ChemTree>>, Maps);
     if updated || !data_exists(&data_string) || args.update {
-        initialize = initialize_compound_tree(data_string, paths);
+        initialize = initialize_compound_tree(paths);
     } else {
-        initialize = initialize_compound_tree(data_string, None);
+        initialize = initialize_compound_tree(None);
     }
 
     let reaction_trees: Box<HashMap<String, ChemTree>> = initialize.0;

@@ -1,37 +1,28 @@
 use crate::{
     chem_tree::{ChemTree, ChemTreeNode},
     chemicals::{Chemical, Data, Reaction},
-    local::{deserialize, serialize, serialize_to_sql, deserialize_from_sql},
+    local::{serialize, serialize_to_sql, deserialize_from_sql},
     parser,
-    search_engine::{generate_search_keys, Maps}, sql::{setup_database, database}
+    search_engine::{Maps}, sql::{setup_database, database}
 };
 use std::collections::HashMap;
 
-pub fn initialize_compound_tree(
-    serialize_path: String,
-    optional_path: Option<String>,
-) -> (Box<HashMap<String, ChemTree>>, Maps) {
+pub fn initialize_compound_tree(optional_path: Option<String>) -> (Box<HashMap<String, ChemTree>>, Maps) {
     match optional_path {
         Some(path) => {
             setup_database(database());
             let reactions = parser::parse(path);
             println!("There are {} compounds.", reactions.len());
-            serialize_to_sql(reactions.clone());
-            let data = Data {
-                compounds: reactions,
-            };
-            serialize(&data, serialize_path.clone());
+            serialize_to_sql(reactions);
         }
         None => {}
     }
     let reactions = deserialize_from_sql();
     let mut reaction_map: HashMap<String, Reaction> = HashMap::with_capacity(reactions.len());
     let mut result_map: HashMap<String, Vec<String>> = HashMap::with_capacity(reactions.len());
-    let mut search_map: HashMap<String, Vec<String>> = HashMap::with_capacity(reactions.len());
     let mut uses_map: HashMap<String, Vec<String>> = HashMap::with_capacity(reactions.len());
     // registers all possible results with their respective internal names
     for reaction in &reactions {
-        search_map = generate_search_keys(search_map, reaction.clone());
         result_map
             .entry(reaction.get_result())
             .or_default()
@@ -64,7 +55,6 @@ pub fn initialize_compound_tree(
     let maps = Maps {
         reaction_map,
         result_map,
-        search_map,
         uses_map,
     };
 

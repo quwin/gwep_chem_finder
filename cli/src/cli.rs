@@ -50,46 +50,20 @@ pub fn start_cli(maps: &Maps, reaction_trees: &Box<HashMap<String, ChemTree>>) {
                 None => println!("Missing command after /"),
             }
         } else {
-            //check if result and reaction are same to prevent ignoring alternate recipes seperately defined
-            match maps.search_map.get(&clean) {
-                Some(x) => {
-                    let direct = reaction_trees.get(&clean);
-                    match direct {
-                        Some(x) => print_dispenser_format(x.clone(), toggle),
-                        None => {
-                            let search = sql_search(&clean);
-                            match search {
-                                Ok(s) => {
-                                    let fuzzy = collision_select(&s);
-                                    let search_result = reaction_trees.get(&fuzzy);
-                                    match search_result {
-                                        Some(x) => print_dispenser_format(x.clone(), toggle),
-                                        None => {}
-                                    }
-                                }
-                                Err(_) => {}
-                            }
-                        }
-                    }
-                }
+            match reaction_trees.get(&clean) {
+                Some(x) => print_dispenser_format(x.clone(), toggle),
                 None => {
-                    let direct = reaction_trees.get(&clean);
-                    match direct {
-                        Some(x) => print_dispenser_format(x.clone(), toggle),
-                        None => {
-                            let search = sql_search(&clean);
-                            match search {
-                                Ok(s) => {
-                                    let fuzzy = collision_select(&s);
-                                    let search_result = reaction_trees.get(&fuzzy);
-                                    match search_result {
-                                        Some(x) => print_dispenser_format(x.clone(), toggle),
-                                        None => {}
-                                    }
-                                }
-                                Err(_) => {}
+                    let search = reaction_search(&clean);
+                    match search {
+                        Ok(s) => {
+                            let fuzzy = collision_select(&s);
+                            let search_result = reaction_trees.get(&fuzzy);
+                            match search_result {
+                                Some(x) => print_dispenser_format(x.clone(), toggle),
+                                None => {println!("Error: couldn't find result for {}", fuzzy)}
                             }
                         }
+                        Err(e) => {println!("Error: {}", e)}
                     }
                 }
             }
@@ -101,8 +75,7 @@ fn requires(maps: &Maps, w: &str) {
     let lookup = match BASES_MAP.get(w) {
         Some(_) => w.to_string(),
 
-        // collision_select(&sql_search(&w.to_string()).unwrap())
-        None => fuzzy_search(&w.to_string(), &maps),
+        None => collision_select(&reagent_search(&w.to_string()).unwrap()),
     };
     let uses = maps.uses_map.get(&lookup);
     match uses {
