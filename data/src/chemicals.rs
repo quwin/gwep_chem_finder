@@ -1,126 +1,57 @@
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum Base {
-    Aluminium,
-    Barium,
-    Bromine,
-    Calcium,
-    Carbon,
-    Chlorine,
-    Chromium,
-    Copper,
-    Ethanol,
-    Fluorine,
-    Hydrogen,
-    Iodine,
-    Iron,
-    Lithium,
-    Magnesium,
-    Mercury,
-    Nickel,
-    Nitrogen,
-    Oxygen,
-    Phosphorus,
-    Plasma,
-    Platinum,
-    Potassium,
-    Radium,
-    Silicon,
-    Silver,
-    Sodium,
-    Sugar,
-    Sulfur,
-    Water,
-}
-
-impl Base {
-    pub fn get_id(&self) -> String {
-        let id = format!("{:?}", self);
-        id.to_lowercase()
-    }
-}
-
-pub static BASES: [Base; 30] = [
-    Base::Aluminium,
-    Base::Barium,
-    Base::Bromine,
-    Base::Calcium,
-    Base::Carbon,
-    Base::Chlorine,
-    Base::Chromium,
-    Base::Copper,
-    Base::Ethanol,
-    Base::Fluorine,
-    Base::Hydrogen,
-    Base::Iodine,
-    Base::Iron,
-    Base::Lithium,
-    Base::Magnesium,
-    Base::Mercury,
-    Base::Nickel,
-    Base::Nitrogen,
-    Base::Oxygen,
-    Base::Phosphorus,
-    Base::Plasma,
-    Base::Platinum,
-    Base::Potassium,
-    Base::Radium,
-    Base::Silicon,
-    Base::Silver,
-    Base::Sodium,
-    Base::Sugar,
-    Base::Sulfur,
-    Base::Water,
+pub static BASES: [&str; 30] = [
+    "aluminium",
+    "barium",
+    "bromine",
+    "calcium",
+    "carbon",
+    "chlorine",
+    "chromium",
+    "copper",
+    "ethanol",
+    "fluorine",
+    "hydrogen",
+    "iodine",
+    "iron",
+    "lithium",
+    "magnesium",
+    "mercury",
+    "nickel",
+    "nitrogen",
+    "oxygen",
+    "phosphorus",
+    "plasma",
+    "platinum",
+    "potassium",
+    "radium",
+    "silicon",
+    "silver",
+    "sodium",
+    "sugar",
+    "sulfur",
+    "water"
 ];
-
-pub static BASES_MAP: Lazy<HashMap<&str, Base>> = Lazy::new(|| {
-    HashMap::from([
-        ("aluminium", Base::Aluminium),
-        ("barium", Base::Barium),
-        ("bromine", Base::Bromine),
-        ("calcium", Base::Calcium),
-        ("carbon", Base::Carbon),
-        ("chlorine", Base::Chlorine),
-        ("chromium", Base::Chromium),
-        ("copper", Base::Copper),
-        ("ethanol", Base::Ethanol),
-        ("fluorine", Base::Fluorine),
-        ("hydrogen", Base::Hydrogen),
-        ("iodine", Base::Iodine),
-        ("iron", Base::Iron),
-        ("lithium", Base::Lithium),
-        ("magnesium", Base::Magnesium),
-        ("mercury", Base::Mercury),
-        ("nickel", Base::Nickel),
-        ("nitrogen", Base::Nitrogen),
-        ("oxygen", Base::Oxygen),
-        ("phosphorus", Base::Phosphorus),
-        ("plasma", Base::Plasma),
-        ("platinum", Base::Platinum),
-        ("potassium", Base::Potassium),
-        ("radium", Base::Radium),
-        ("silicon", Base::Silicon),
-        ("silver", Base::Silver),
-        ("sodium", Base::Sodium),
-        ("sugar", Base::Sugar),
-        ("sulfur", Base::Sulfur),
-        ("water", Base::Water),
-    ])
-});
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Reagent {
-    pub name: String,
-    pub quantity: u32,
-    pub ingredient_type: Chemical
+    name: String,
+    quantity: u32,
+    ingredient_type: Chemical
 }
 
 impl Reagent {
     pub fn new(name: String, quantity: u32, ingredient_type: Chemical) -> Reagent {
         Reagent { name, quantity, ingredient_type }
+    }
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn get_quantity(&self) -> u32 {
+        self.quantity
+    }
+    pub fn get_type(&self) -> Chemical {
+        self.ingredient_type.clone()
     }
 }
 

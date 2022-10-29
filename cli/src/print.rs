@@ -17,12 +17,12 @@ pub async fn print_dispenser_format(reaction: Reaction, show_percent: bool) {
         for reagent in recipe {
             // This gets the percent each reagent is of the top chem if enabled
             let percent = if show_percent {
-                reagent.quantity as f32 * ((10000.0 / recipe.iter()
-                    .fold(0.0, |a, b| a + b.quantity as f32))
+                reagent.get_quantity() as f32 * ((10000.0 / recipe.iter()
+                    .fold(0.0, |a, b| a + b.get_quantity() as f32))
                     .round()
                 )/ 100.0
             } else {
-                reagent.quantity as f32
+                reagent.get_quantity() as f32
             };
             let result = print_branch(reagent.clone(), 0, percent, show_percent);
             match result.0 {
@@ -96,7 +96,7 @@ fn print_branch(
         c -= 1;
     }
 
-    match reagent.ingredient_type {
+    match reagent.get_type() {
         Chemical::Compound(reaction) => {
             let mut branch_strings = Vec::new();
             let all_reagents = reaction.get_reagents_of_recipe(0);
@@ -105,7 +105,7 @@ fn print_branch(
                     branch_strings.push(print_branch(
                         lower_reagent.clone(),
                         layer + 1,
-                        lower_reagent.quantity as f32,
+                        lower_reagent.get_quantity() as f32,
                         show_percent,
                     ));
                 } else {
@@ -113,8 +113,8 @@ fn print_branch(
                         lower_reagent.clone(),
                         layer + 1,
                         ((100.0 * percent
-                            / (lower_reagent.quantity as f32
-                                * (all_reagents.iter().fold(0.0, |a, b| a + b.quantity as f32))))
+                            / (lower_reagent.get_quantity() as f32
+                                * (all_reagents.iter().fold(0.0, |a, b| a + b.get_quantity() as f32))))
                         .round())
                             / 100.0,
                         show_percent,
@@ -186,12 +186,12 @@ fn print_branch(
             if show_percent {
                 result = (
                     Chemical::Base,
-                    format!("({}% {}) ", percent, reagent.name.to_ascii_uppercase()),
+                    format!("({}% {}) ", percent, reagent.get_name().to_ascii_uppercase()),
                 );
             } else {
                 result = (
                     Chemical::Base,
-                    format!("({} {}) ", percent, reagent.name.to_ascii_uppercase()),
+                    format!("({} {}) ", percent, reagent.get_name().to_ascii_uppercase()),
                 );
             }
         }
@@ -199,12 +199,12 @@ fn print_branch(
             if show_percent {
                 result = (
                     Chemical::Ingredient,
-                    format!("<{}%\"{}\"> ", percent, reagent.name),
+                    format!("<{}%\"{}\"> ", percent, reagent.get_name()),
                 );
             } else {
                 result = (
                     Chemical::Ingredient,
-                    format!("<{}\"{}\"> ", percent, reagent.name),
+                    format!("<{}\"{}\"> ", percent, reagent.get_name()),
                 );
             }
         }

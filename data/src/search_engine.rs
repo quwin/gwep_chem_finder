@@ -48,20 +48,25 @@ pub async fn reagent_uses(reagent: String) -> Result<Vec<String>, sqlx::Error > 
 #[tokio::main]
 pub async fn reaction_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
     let mut strings: Vec<String> = Vec::new();
-    strings = search_reaction_starts_with(input, strings).await?;
-    strings = search_reaction_multi_starts_with(input, strings).await?;
+
+    let mut clean = input.to_string();
+    if input.len() > 10 {
+        clean.truncate(10)
+    }
+    strings = search_reaction_starts_with(&clean, strings).await?;
+    strings = search_reaction_multi_starts_with(&clean, strings).await?;
 
     if strings.len() > 5 {
         return Ok(strings[0..5].to_vec())
     }
 
-    strings = search_reaction_contains(input, strings).await?;
+    strings = search_reaction_contains(&clean, strings).await?;
 
     if strings.len() > 5 {
         return Ok(strings[0..5].to_vec())
     } 
 
-    strings = search_typos(input, strings, true).await?;
+    strings = search_typos(&clean, strings, true).await?;
 
     if strings.len() > 5 {
         return Ok(strings[0..5].to_vec())
@@ -72,7 +77,7 @@ pub async fn reaction_search(input: &String) -> Result<Vec<String>, sqlx::Error 
     Err(sqlx::Error::RowNotFound)
 }
 
-pub async fn search_reaction_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+async fn search_reaction_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -141,7 +146,7 @@ pub async fn search_reaction_starts_with(input: &String, mut strings: Vec<String
     Ok(strings)
 }
 
-pub async fn search_reaction_multi_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+async fn search_reaction_multi_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -218,7 +223,7 @@ pub async fn search_reaction_multi_starts_with(input: &String, mut strings: Vec<
     Ok(strings)
 }
 
-pub async fn search_reaction_contains(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+async fn search_reaction_contains(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -294,9 +299,9 @@ pub async fn search_reaction_contains(input: &String, mut strings: Vec<String>) 
 - Likewise, searching "flood", a single letter typo, will give better results than "bloea", "blaad", "breod", two letter typos.
 - Catches incorrect string lengths as well, but their priority is lowered.
 - Searching "blooood" hits "blood" on loop 2-2, due to looking up "bloo__d" hitting "blood"
-- Typo search is O(n²) at minimum until it hits at least 5 results so please dont use excessive input lengths... need to set a max input length
+- Typo search is O(n²) at minimum until it hits at least 5 results so input length is limited to 10 characters
 */
-pub async fn search_typos(input: &String, mut strings: Vec<String>, reaction: bool) -> Result<Vec<String>, sqlx::Error > {
+async fn search_typos(input: &String, mut strings: Vec<String>, reaction: bool) -> Result<Vec<String>, sqlx::Error > {
 
     // Prevents underflow
     // Was thinking about doing input / x but doing this and truncating the input when it's received leads to a wider range of results
@@ -332,20 +337,26 @@ pub async fn search_typos(input: &String, mut strings: Vec<String>, reaction: bo
 #[tokio::main]
 pub async fn reagent_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
     let mut strings: Vec<String> = Vec::new();
-    strings = search_reagent_starts_with(input, strings).await?;
-    strings = search_reagent_multi_starts_with(input, strings).await?;
+
+    let mut clean = input.to_string();
+    if input.len() > 10 {
+        clean.truncate(10)
+    }
+
+    strings = search_reagent_starts_with(&clean, strings).await?;
+    strings = search_reagent_multi_starts_with(&clean, strings).await?;
 
     if strings.len() > 5 {
         return Ok(strings[0..5].to_vec())
     }
 
-    strings = search_reagent_contains(input, strings).await?;
+    strings = search_reagent_contains(&clean, strings).await?;
 
     if strings.len() > 5 {
         return Ok(strings[0..5].to_vec())
     } 
 
-    strings = search_typos(input, strings, false).await?;
+    strings = search_typos(&clean, strings, false).await?;
 
     if strings.len() > 5 {
         return Ok(strings[0..5].to_vec())
@@ -356,7 +367,7 @@ pub async fn reagent_search(input: &String) -> Result<Vec<String>, sqlx::Error >
     Err(sqlx::Error::RowNotFound)
 }
 
-pub async fn search_reagent_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+async fn search_reagent_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -390,7 +401,7 @@ pub async fn search_reagent_starts_with(input: &String, mut strings: Vec<String>
     Ok(strings)
 }
 
-pub async fn search_reagent_multi_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+async fn search_reagent_multi_starts_with(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -466,7 +477,7 @@ pub async fn search_reagent_multi_starts_with(input: &String, mut strings: Vec<S
     Ok(strings)
 }
 
-pub async fn search_reagent_contains(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
+async fn search_reagent_contains(input: &String, mut strings: Vec<String>) -> Result<Vec<String>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -498,11 +509,6 @@ pub async fn search_reagent_contains(input: &String, mut strings: Vec<String>) -
     }
 
     Ok(strings)
-}
-
-pub fn clean_input(input: String) -> String {
-    let words: Vec<_> = input.split_whitespace().collect();
-    words.join(" ")
 }
 
 pub fn collision_select(result: &Vec<String>) -> String {

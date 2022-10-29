@@ -1,5 +1,5 @@
 use data::{
-    chemicals::{BASES, BASES_MAP},
+    chemicals::BASES,
     search_engine::*, sql::fetch_reaction,
 };
 
@@ -15,7 +15,7 @@ pub fn start_cli() {
             Ok(_) => {}
             Err(e) => eprintln!("Error: {}", e),
         }
-        let clean = clean_input(user_input.trim().to_lowercase().to_string());
+        let clean = user_input.to_lowercase().split_whitespace().collect::<Vec<&str>>().join(" ");
 
         if clean.is_empty() {
             println!("Please input a chemical to display or a command with '/'")
@@ -61,10 +61,10 @@ pub fn start_cli() {
 }
 
 fn requires(w: &str) {
-    let lookup = match BASES_MAP.get(w) {
-        Some(_) => w.to_string(),
-
-        None => collision_select(&reagent_search(&w.to_string()).unwrap()),
+    let lookup = if BASES.contains(&w) {
+        w.to_string()
+    } else {
+        collision_select(&reagent_search(&w.to_string()).unwrap())
     };
     let uses = reagent_uses(lookup.clone());
     match uses {

@@ -2,7 +2,7 @@ use async_recursion::async_recursion;
 use sqlx::ConnectOptions;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use std::str::FromStr;
-use crate::chemicals::{Reaction, BASES_MAP, Recipe, Reagent, Chemical};
+use crate::chemicals::{Reaction, BASES, Recipe, Reagent, Chemical};
 
 #[tokio::main]
 pub async fn get_all_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
@@ -36,7 +36,7 @@ pub async fn get_all_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
 }
 
 #[async_recursion(?Send)]
-pub async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error> {
+async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error> {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -73,19 +73,12 @@ pub async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error
         .await?;
         let mut recipes_reagents: Vec<Reagent> = Vec::new();
         for reagent in reagents {
-            recipes_reagents.push(
-                Reagent { 
-                    name: reagent.name.clone(), 
-                    quantity: reagent.amount as u32,
-                    ingredient_type: match reagent.ingredient_type.as_str() {
-                        "base" => Chemical::Base,
-                        "compound" => { 
-                            Chemical::Compound(get_reaction(reagent.name).await?)
-                        }
-                        _ => Chemical::Ingredient,
-                    }
-                }
-            )
+            let ingredient_type = match reagent.ingredient_type.as_str() {
+                "base" => Chemical::Base,
+                "compound" => Chemical::Compound(get_reaction(reagent.name.clone()).await?),
+                _ => Chemical::Ingredient
+            };
+            recipes_reagents.push(Reagent::new(reagent.name.clone(), reagent.amount as u32, ingredient_type))
         }
         let struc = Recipe::new(
             recipe.id,
@@ -207,8 +200,8 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
         let reaction = reactions[index].clone();
         for num in 0..reaction.recipe_amount() {
             for reagent in reaction.get_reagents_of_recipe(num) {
-                let name = reagent.name.clone();
-                let amount = reagent.quantity;
+                let name = reagent.get_name();
+                let amount = reagent.get_quantity();
                 sqlx::query!(
                     r#"INSERT INTO reagents
                     (recipe, name, amount)
@@ -222,7 +215,6 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
                     .execute(&mut conn)
                     .await?;
                 if reaction_list.contains(&name) {
-                    let name = reagent.name.clone();
                     sqlx::query!(
                         r#"UPDATE reagents
                         SET ingredient_type = 'compound'
@@ -233,8 +225,7 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
                         )
                         .execute(&mut conn)
                         .await?;
-                } else if BASES_MAP.contains_key(name.as_str()) {
-                    let name = reagent.name.clone();
+                } else if BASES.contains(&name.as_str()) {
                     sqlx::query!(
                         r#"UPDATE reagents
                         SET ingredient_type = 'base'
