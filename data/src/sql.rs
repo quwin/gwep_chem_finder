@@ -1,3 +1,4 @@
+use async_recursion::async_recursion;
 use sqlx::ConnectOptions;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use std::str::FromStr;
@@ -34,7 +35,8 @@ pub async fn get_all_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
     Ok(reactions)
 }
 
-pub async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error >{
+#[async_recursion(?Send)]
+pub async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error> {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -73,11 +75,13 @@ pub async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error
         for reagent in reagents {
             recipes_reagents.push(
                 Reagent { 
-                    name: reagent.name, 
+                    name: reagent.name.clone(), 
                     quantity: reagent.amount as u32,
                     ingredient_type: match reagent.ingredient_type.as_str() {
                         "base" => Chemical::Base,
-                        // "compound" => Chemical::Compound(x),
+                        "compound" => { 
+                            Chemical::Compound(get_reaction(reagent.name).await?)
+                        }
                         _ => Chemical::Ingredient,
                     }
                 }
@@ -212,7 +216,7 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
                     "#,
                     second_counter,
                     name,
-                    amount
+                    amount,
                     )
                     
                     .execute(&mut conn)
@@ -221,7 +225,7 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
                     let name = reagent.name.clone();
                     sqlx::query!(
                         r#"UPDATE reagents
-                        SET ingredient_type = 'chemical'
+                        SET ingredient_type = 'compound'
                         WHERE name LIKE ? AND recipe = ?
                         "#,
                         name,

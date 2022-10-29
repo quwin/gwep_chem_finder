@@ -124,12 +124,6 @@ impl Reagent {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(transparent)]
-pub struct Data {
-    pub compounds: Vec<Reaction>,
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Chemical {
     Base,
