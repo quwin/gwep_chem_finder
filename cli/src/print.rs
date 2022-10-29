@@ -1,5 +1,4 @@
-use data::{
-    chemicals::{Chemical, Reaction}};
+use data::chemicals::{Chemical, Reaction};
 
 #[tokio::main]
 pub async fn print_dispenser_format(reaction: Reaction, show_percent: bool) {
@@ -16,14 +15,12 @@ pub async fn print_dispenser_format(reaction: Reaction, show_percent: bool) {
         let mut compounds = String::new();
         let mut ingredients = String::new();
         for reagent in recipe {
-            // I heard u liked one-liners... This gets the percent each reagent is of the top chem
+            // This gets the percent each reagent is of the top chem if enabled
             let percent = if show_percent {
-                ((10000.0
-                    / reaction.get_reagents_of_recipe(count - 1)
-                        .iter()
-                        .fold(0.0, |a, b| a + b.quantity as f32))
-                .round())
-                    / 100.0
+                reagent.quantity as f32 * ((10000.0 / recipe.iter()
+                    .fold(0.0, |a, b| a + b.quantity as f32))
+                    .round()
+                )/ 100.0
             } else {
                 reagent.quantity as f32
             };
