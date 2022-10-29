@@ -1,10 +1,10 @@
 use sqlx::ConnectOptions;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use std::str::FromStr;
-use crate::chemicals::{Reaction, BASES_MAP, Recipe, RawReagent};
+use crate::chemicals::{Reaction, BASES_MAP, Recipe, Reagent, Chemical};
 
 #[tokio::main]
-pub async fn get_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
+pub async fn get_all_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
     dotenvy::dotenv().ok();
 
     std::env::set_var("DATABASE_URL", "sqlite://data.db");
@@ -16,90 +16,114 @@ pub async fn get_reactions() -> Result<Vec<Reaction>, sqlx::Error > {
         .journal_mode(SqliteJournalMode::Wal)
         .connect().await?;
 
-    let num_of_reactions = sqlx::query!(
+    let internal_names = sqlx::query!(
         "
-        SELECT recipes
-        FROM reactions
-        ORDER BY recipes DESC;
+        SELECT internal_name
+        FROM reactions;
         "
     )
-    .fetch_one(&mut conn)
-    .await?.recipes;
+    .fetch_all(&mut conn)
+    .await?;
 
-    for num in 0..num_of_reactions {
-        let recipes = sqlx::query!(
-            r#"
-            SELECT *
-            FROM recipes
-            WHERE reaction = ?;
-            "#,
-            num
-        )
-        .fetch_all(&mut conn)
-        .await?;
+    for name in internal_names.iter().map(|i| i.internal_name.as_ref().unwrap()) {
 
-        let mut recipe_list: Vec<Recipe> = Vec::new();
-
-        for recipe in recipes {
-            let unwraped = recipe.reagents.unwrap();
-            let reagents = sqlx::query!(
-                r#"
-                SELECT *
-                FROM reagents
-                WHERE recipe = ?;
-                "#,
-                unwraped
-            )
-            .fetch_all(&mut conn)
-            .await?;
-            let mut recipes_reagents: Vec<RawReagent> = Vec::new();
-            for reagent in reagents {
-                recipes_reagents.push(
-                    RawReagent { 
-                        name: reagent.name, 
-                        quantity: reagent.amount as u32 
-                    }
-                )
-            }
-            let struc = Recipe::new(
-                recipe.id,
-                recipes_reagents,
-                recipe.result_amount as f32, 
-            );
-            recipe_list.push(struc);
-        }
-        let reaction_query = sqlx::query!(
-            r#"
-            SELECT *
-            FROM reactions
-            WHERE recipes = ?;
-            "#,
-            num
-        )
-        .fetch_one(&mut conn)
-        .await?;
-
-        let required_temp: Option<f32>;
-
-        match reaction_query.required_temp {
-            Some(temp) => { required_temp = Some(temp as f32)}
-            _ => { required_temp = None }
-        }
-
-        let reaction = Reaction::new(
-            reaction_query.internal_name.unwrap(),
-            reaction_query.name,
-            reaction_query.result,
-            recipe_list,
-            reaction_query.mix_phrase,
-            required_temp,
-            reaction_query.instant,
-            reaction_query.hidden
-        );
+        let reaction = get_reaction(name.clone()).await?;
 
         reactions.push(reaction);
     }
     Ok(reactions)
+}
+
+pub async fn get_reaction(internal_name: String) -> Result<Reaction, sqlx::Error >{
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let recipes = sqlx::query!(
+        r#"
+        SELECT *
+        FROM recipes
+        WHERE reaction = ?;
+        "#,
+        internal_name
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    let mut recipe_list: Vec<Recipe> = Vec::new();
+
+    for recipe in recipes {
+        let unwraped = recipe.reagents.unwrap();
+        let reagents = sqlx::query!(
+            r#"
+            SELECT *
+            FROM reagents
+            WHERE recipe = ?;
+            "#,
+            unwraped
+        )
+        .fetch_all(&mut conn)
+        .await?;
+        let mut recipes_reagents: Vec<Reagent> = Vec::new();
+        for reagent in reagents {
+            recipes_reagents.push(
+                Reagent { 
+                    name: reagent.name, 
+                    quantity: reagent.amount as u32,
+                    ingredient_type: match reagent.ingredient_type.as_str() {
+                        "base" => Chemical::Base,
+                        // "compound" => Chemical::Compound(x),
+                        _ => Chemical::Ingredient,
+                    }
+                }
+            )
+        }
+        let struc = Recipe::new(
+            recipe.id,
+            recipes_reagents,
+            recipe.result_amount as f32, 
+        );
+        recipe_list.push(struc);
+    }
+    let reaction_query = sqlx::query!(
+        r#"
+        SELECT *
+        FROM reactions
+        WHERE internal_name = ?;
+        "#,
+        internal_name
+    )
+    .fetch_one(&mut conn)
+    .await?;
+
+    let required_temp: Option<f32>;
+
+    match reaction_query.required_temp {
+        Some(temp) => { required_temp = Some(temp as f32)}
+        _ => { required_temp = None }
+    }
+
+    let reaction = Reaction::new(
+        reaction_query.internal_name.unwrap(),
+        reaction_query.name,
+        reaction_query.result,
+        recipe_list,
+        reaction_query.mix_phrase,
+        required_temp,
+        reaction_query.instant,
+        reaction_query.hidden
+    );
+    Ok(reaction)
+}
+
+#[tokio::main]
+pub async fn fetch_reaction(internal_name: String) -> Reaction {
+    get_reaction(internal_name).await.unwrap()
 }
 
 #[tokio::main]
@@ -125,20 +149,18 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
         let mix_phrase = reaction.get_mix_phrase();
         let instant = reaction.is_instant();
         let hidden = reaction.is_hidden();
-        let placed_index = index as i32;
 
         sqlx::query!(
             r#"INSERT INTO reactions
-            (internal_name, name, result, mix_phrase, instant, hidden, recipes)
-            VALUES (?,?,?,?,?,?,?);
+            (internal_name, name, result, mix_phrase, instant, hidden)
+            VALUES (?,?,?,?,?,?);
             "#,
             internal_name,
             name,
             result,
             mix_phrase,
             instant,
-            hidden,
-            placed_index
+            hidden
             )
             .execute(&mut conn)
             .await?;
@@ -156,7 +178,6 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
                 .await?;
         }
         for num in 0..reaction.recipe_amount() {
-            let reaction_id = index as i32;
             let recipe_index = num as i32;
             let id = reaction.get_id_of_recipe(num);
             let result_amount = reaction.get_specific_recipe_result_amount(num);
@@ -165,7 +186,7 @@ pub async fn add_reaction(reactions: Vec<Reaction>) -> Result<(), sqlx::Error > 
                 (reaction, recipe_index, id, reagents, result_amount)
                 VALUES (?,?,?,?,?);
                 "#,
-                reaction_id,
+                internal_name,
                 recipe_index,
                 id,
                 first_counter,
@@ -266,8 +287,7 @@ pub async fn database() -> Result<(), sqlx::Error > {
                 mix_phrase TEXT NOT NULL,
                 required_temp FLOAT,
                 instant BOOLEAN NOT NULL,
-                hidden BOOLEAN NOT NULL,
-                recipes INT NOT NULL UNIQUE
+                hidden BOOLEAN NOT NULL
             );"
         )
         .execute(&mut conn)
@@ -275,12 +295,12 @@ pub async fn database() -> Result<(), sqlx::Error > {
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS recipes (
-                reaction INT,
+                reaction TEXT,
+                reagents INT PRIMARY KEY,
                 recipe_index INT NOT NULL,
                 id TEXT NOT NULL,
-                reagents INT PRIMARY KEY,
                 result_amount FLOAT NOT NULL,
-                FOREIGN KEY(reaction) REFERENCES reactions(recipes)
+                FOREIGN KEY(reaction) REFERENCES reactions(internal_name)
             );"
         )
         .execute(&mut conn)

@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 data = {path = "../data"}
+sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "sqlite" ] }
+tokio = { version = "1", features = ["full"] }

@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::{chemicals::*, sql::{add_reaction, add_reactions, get_reactions}};
+use crate::{chemicals::*, sql::{add_reaction, add_reactions, get_all_reactions}};
 use serde_json;
 
 pub fn serialize(compounds: &Data, serialize_path: String) {
@@ -20,7 +20,7 @@ pub fn serialize_to_sql(compounds: Vec<Reaction>) {
 }
 
 pub fn deserialize_from_sql() -> Vec<Reaction> {
-    get_reactions().unwrap()
+    get_all_reactions().unwrap()
 }
 
 pub fn deserialize(deserialize_path: String) -> Vec<Reaction> {

@@ -1,13 +1,50 @@
 use sqlx::{sqlite::{SqliteConnectOptions, SqliteJournalMode}, ConnectOptions};
+use std::{io, str::FromStr};
 
-use crate::chemicals::Reaction;
-use std::{collections::HashMap, io, str::FromStr};
+#[tokio::main]
+pub async fn reagent_uses(reagent: String) -> Result<Vec<String>, sqlx::Error > {
+    let mut strings: Vec<String> = Vec::new();
 
-pub struct Maps {
-    pub reaction_map: HashMap<String, Reaction>,
-    pub result_map: HashMap<String, Vec<String>>,
-    pub uses_map: HashMap<String, Vec<String>>,
+    dotenvy::dotenv().ok();
+
+    std::env::set_var("DATABASE_URL", "sqlite://data.db");
+    let env = &std::env::var("DATABASE_URL").ok().unwrap();
+
+    let mut conn = SqliteConnectOptions::from_str(env)?
+        .journal_mode(SqliteJournalMode::Wal)
+        .connect().await?;
+
+    let search = sqlx::query!(
+        r#"
+        SELECT recipe
+        FROM reagents
+        WHERE name LIKE ?;
+        "#,
+        reagent
+    )
+    .fetch_all(&mut conn)
+    .await?;
+
+    for recipe in search {
+        let search_recipe = sqlx::query!(
+            r#"
+            SELECT reaction
+            FROM recipes
+            WHERE reagents LIKE ?;
+            "#,
+            recipe.recipe
+        )
+        .fetch_all(&mut conn)
+        .await?;
+
+        for reaction in search_recipe {
+            strings.push(reaction.reaction.unwrap())
+        }
+    }
+
+    Ok(strings)
 }
+
 #[tokio::main]
 pub async fn reaction_search(input: &String) -> Result<Vec<String>, sqlx::Error > {
     let mut strings: Vec<String> = Vec::new();
