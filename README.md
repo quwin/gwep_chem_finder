@@ -9,6 +9,8 @@ This Vec of structs is then converted into a tree that contains all of the requi
 The program can be run in CLI mode with -c or --cli as a launch argument ex. `cargo run -- -c`.
 The program takes a reaction to display and also commands as input with "/".
 
+Chemicals can be search by typing their name into the cli, with relevant results and their recipies appearing once entered.
+
 Use `/help` or `/h` to see all commands.
 
 ## Goal of the program
